@@ -105,20 +105,43 @@ function canonicalizeCallout(calloutName: string): keyof typeof calloutMapping {
 }
 
 function propertyLinksToRegularMarkdown(obj: { [key: string]: any }): string {
-  // Parses wikilinks from FrontMatter properties and returns a string with all.
-  let result = ""
+  // Parse wikilinks from frontmatter
+  let result = "";
 
   for (const key in obj) {
-    if (Object.prototype.hasOwnProperty.call(obj, key)) {
-      if (
-        Array.isArray(obj[key]) &&
-        typeof obj[key][0] === "string" &&
-        obj[key][0].includes("[[")
-      ) {
-        result += `- ${key}: ${obj[key].join(", ")}\n`
-      } else if (typeof obj[key] === "string" && obj[key].includes("[[")) {
-        result += `- ${key}: ${obj[key]}\n`
+    // Skip special keys
+    if (key === "tags" || key === "title" || key === "aliases") continue;
+
+    const value = obj[key];
+    if (Array.isArray(value)) {
+      // Array handling
+      if (value.every(val => typeof val === "string" && val.startsWith("http"))) {
+        if (value.length > 1) {
+          // Format multiple URLs as a list
+          result += `- ${key}:\n`;
+          value.forEach((val) => {
+            result += `  - [${val}](${val})\n`; // Format each URL on a new line
+          });
+        } else {
+          // Single URL, no nesting
+          result += `- ${key}: [${value[0]}](${value[0]})\n`;
+        }
+      } else {
+        // Inline array handling
+        const formattedValues = value.map(val => val.includes("[[") ? val : `\`${val}\``);
+        result += `- ${key}: ${formattedValues.join(", ")}\n`;
       }
+    } else if (typeof value === "string") {
+      if (value.startsWith("http")) {
+        // Single URL string
+        result += `- ${key}: [${value}](${value})\n`;
+      } else {
+        // Handle single wikilink or plain string
+        result += `- ${key}: ${value.includes("[[") ? value : `\`${value}\``}\n`;
+      }
+    } else {
+      // Handle non-string, non-array values by simply converting them to string
+      result += `- ${key}: ${JSON.stringify(value)}\n`;
     }
   }
 
@@ -312,9 +335,8 @@ export const ObsidianFlavoredMarkdown: QuartzTransformerPlugin<Partial<Options> 
                     return {
                       type: "html",
                       data: { hProperties: { transclude: true } },
-                      value: `<blockquote class="transclude" data-url="${url}" data-block="${block}"><a href="${
-                        url + anchor
-                      }" class="transclude-inner">Transclude of ${url}${block}</a></blockquote>`,
+                      value: `<blockquote class="transclude" data-url="${url}" data-block="${block}"><a href="${url + anchor
+                        }" class="transclude-inner">Transclude of ${url}${block}</a></blockquote>`,
                     }
                   }
 
@@ -476,9 +498,9 @@ export const ObsidianFlavoredMarkdown: QuartzTransformerPlugin<Partial<Options> 
                       type: "text",
                       value: useDefaultTitle
                         ? capitalize(
-                            i18n(cfg.locale).components.callout[calloutType as ValidCallout] ??
-                              calloutType,
-                          )
+                          i18n(cfg.locale).components.callout[calloutType as ValidCallout] ??
+                          calloutType,
+                        )
                         : titleContent + " ",
                     },
                     ...restOfTitle,
@@ -713,3 +735,4 @@ declare module "vfile" {
     htmlAst: HtmlRoot
   }
 }
+
